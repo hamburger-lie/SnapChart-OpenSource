@@ -1,4 +1,4 @@
-# 📊 ChartForge — 数据解析与图表可视化系统
+# 📊 SnapChart — 数据解析与图表可视化系统
 
 > 上传 Excel / CSV 文件，一键生成可交互、可导出的高清商业图表。
 
@@ -49,8 +49,8 @@
 ### 1. 克隆项目
 
 ```bash
-git clone https://github.com/hamburger-lie/-.git
-cd -
+git clone https://github.com/hamburger-lie/SnapChart.git
+cd SnapChart
 ```
 
 ### 2. 启动后端
