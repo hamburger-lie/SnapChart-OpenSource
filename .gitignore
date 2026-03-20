@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.env
+backend/uploads/
+
+# Node
+node_modules/
+dist/
+
+# IDE
+.vscode/
+.idea/
+
+# Claude
+.claude/
