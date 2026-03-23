@@ -81,3 +81,31 @@ class StyleListItem(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ========== 共享图表相关 ==========
+
+class SharedChartCreate(BaseModel):
+    """创建共享图表的请求体"""
+
+    chartType: str = Field(..., description="图表类型")
+    title: str = Field(..., description="图表标题")
+    labels: list = Field(..., description="标签列表")
+    datasets: list = Field(..., description="数据系列列表")
+
+
+class SharedChartResponse(BaseModel):
+    """共享图表创建成功的响应"""
+
+    status: str = Field(default="success", description="响应状态")
+    uuid: str = Field(..., description="共享图表唯一标识")
+    shareUrl: str = Field(..., description="共享访问链接")
+
+
+# ========== API Key 相关 ==========
+
+class ApiKeyCreate(BaseModel):
+    """创建 API Key 的请求体"""
+
+    customer_name: str = Field(..., description="客户名称")
+    initial_credits: int = Field(..., description="初始额度")

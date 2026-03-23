@@ -6,6 +6,7 @@
 import os
 from collections.abc import AsyncGenerator
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -15,8 +16,21 @@ from app.config import settings
 db_path = settings.database_url.replace("sqlite+aiosqlite:///", "")
 os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
 
-# 创建异步引擎
-engine = create_async_engine(settings.database_url, echo=False)
+# 创建异步引擎（增加 SQLite 并发超时）
+engine = create_async_engine(
+    settings.database_url,
+    echo=False,
+    connect_args={"timeout": 15},
+)
+
+
+@event.listens_for(engine.sync_engine, "connect")
+def _set_sqlite_pragma(dbapi_conn, connection_record):
+    """每次建立连接时启用 WAL 模式，提升并发读写性能"""
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL;")
+    cursor.execute("PRAGMA synchronous=NORMAL;")
+    cursor.close()
 
 # 创建异步 Session 工厂
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

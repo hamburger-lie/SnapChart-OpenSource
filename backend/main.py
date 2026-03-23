@@ -7,11 +7,15 @@ import logging
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
 from app.models.database import init_db
+from app.models.api_key_model import ApiKey  # noqa: F401 — 确保 SQLAlchemy 注册表结构
+from app.models.shared_chart_model import SharedChart  # noqa: F401
 from app.routers import chart, style
 
 # 配置日志格式
@@ -39,6 +43,23 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
+
+# 上传体积限制中间件（5MB）
+MAX_BODY_SIZE = 5 * 1024 * 1024  # 5MB
+
+
+class LimitUploadSizeMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > MAX_BODY_SIZE:
+            return JSONResponse(
+                status_code=413,
+                content={"detail": "文件大小不能超过 5MB"},
+            )
+        return await call_next(request)
+
+
+app.add_middleware(LimitUploadSizeMiddleware)
 
 # 配置 CORS 跨域中间件
 app.add_middleware(
