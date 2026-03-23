@@ -14,9 +14,11 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
 from app.models.database import init_db
-from app.models.api_key_model import ApiKey  # noqa: F401 — 确保 SQLAlchemy 注册表结构
-from app.models.shared_chart_model import SharedChart  # noqa: F401
 from app.routers import chart, style
+from app.routers import agent_api
+# 确保 ORM 模型在 init_db 前已导入，使其表结构被注册到 Base.metadata
+from app.models import shared_chart_model as _  # noqa: F401
+from app.models.api_key_model import ApiKey  # noqa: F401 — 确保 SQLAlchemy 注册表结构
 
 # 配置日志格式
 logging.basicConfig(
@@ -73,6 +75,7 @@ app.add_middleware(
 # 注册路由模块
 app.include_router(chart.router)
 app.include_router(style.router)
+app.include_router(agent_api.router)  # AI Agent OpenAPI 专属通道
 
 
 @app.get("/", tags=["系统"])

@@ -4,7 +4,8 @@ uvicorn[standard]==0.34.2
 
 # 文件处理
 pandas==2.2.3
-openpyxl==3.1.5
+openpyxl==3.1.5          # 读取 .xlsx
+xlrd==2.0.1               # 读取老版本 .xls
 python-multipart==0.0.20
 
 # 数据库（样式持久化）

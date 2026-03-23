@@ -6,11 +6,17 @@
 import { useCallback, useRef, useState } from "react";
 import { Upload, FileSpreadsheet, X } from "lucide-react";
 
-/** 允许的文件扩展名 */
-const ALLOWED_EXTENSIONS = [".xlsx", ".csv"];
+/** 允许的文件扩展名（含老版本 .xls） */
+const ALLOWED_EXTENSIONS = [".xlsx", ".xls", ".csv"];
 /** 对应的 MIME 类型（用于 input accept 属性） */
-const ACCEPT_TYPES =
-  ".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv";
+const ACCEPT_TYPES = [
+  ".xlsx",
+  ".xls",
+  ".csv",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+  "application/vnd.ms-excel",                                           // .xls
+  "text/csv",
+].join(",");
 
 interface UploadAreaProps {
   /** 文件选定后的回调 */
@@ -37,7 +43,7 @@ export default function UploadArea({
     const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
       setFileError(
-        `不支持的文件格式"${ext}"，仅支持 .xlsx 和 .csv 文件`
+        `不支持的文件格式"${ext}"，仅支持 .xlsx、.xls 和 .csv 文件`
       );
       return false;
     }
@@ -149,7 +155,7 @@ export default function UploadArea({
           {isDragOver ? "松开鼠标即可上传" : "拖拽文件到此处，或点击选择"}
         </p>
         <p className="text-sm text-gray-400">
-          支持 .xlsx 和 .csv 格式，最大 20MB
+          支持 .xlsx、.xls 和 .csv 格式，最大 20MB
         </p>
 
         {/* 隐藏的文件输入框 */}

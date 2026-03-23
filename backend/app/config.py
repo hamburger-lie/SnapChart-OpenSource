@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     # CORS 配置
     cors_origins: str = "http://localhost:5174,http://localhost:3000"
 
+    # ---- Agent OpenAPI 专属配置 ----
+    # API Key 鉴权（生产环境必须替换为强随机字符串）
+    agent_api_key: str = "change-me-in-production"
+    # 前端域名（用于生成 shareUrl，生产环境改为实际域名）
+    frontend_base_url: str = "http://localhost:5174"
+
     @property
     def cors_origin_list(self) -> list[str]:
         """将逗号分隔的 CORS 来源字符串转为列表"""

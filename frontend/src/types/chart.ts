@@ -82,3 +82,22 @@ export interface StyleListItem {
   thumbnail?: string | null;
   updated_at: string;
 }
+
+// ========== Agent OpenAPI 共享图表类型 ==========
+
+/** Agent 共享图表的数据系列 */
+export interface SharedDatasetItem {
+  name: string;
+  values: number[];
+}
+
+/** GET /api/agent/chart/{uuid} 返回的完整数据 */
+export interface SharedChartData {
+  uuid: string;
+  chartType: string;
+  title: string;
+  labels: string[];
+  datasets: SharedDatasetItem[];
+  theme?: { colors?: string[] } | null;
+  created_at: string;
+}

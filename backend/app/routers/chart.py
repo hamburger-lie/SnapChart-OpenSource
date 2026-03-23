@@ -29,8 +29,8 @@ ALLOWED_CONTENT_TYPES = {
     "application/octet-stream",
 }
 
-# 允许的文件扩展名（作为二次校验）
-ALLOWED_EXTENSIONS = {".xlsx", ".csv"}
+# 允许的文件扩展名（作为二次校验，含老版本 .xls）
+ALLOWED_EXTENSIONS = {".xlsx", ".xls", ".csv"}
 
 
 @router.post(

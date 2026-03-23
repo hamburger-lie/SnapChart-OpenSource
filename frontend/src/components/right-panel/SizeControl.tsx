@@ -25,6 +25,8 @@ export default function SizeControl() {
   const setXAxisConfig = useEditorStore((s) => s.setXAxisConfig);
   const yAxisConfig = useEditorStore((s) => s.yAxisConfig);
   const setYAxisConfig = useEditorStore((s) => s.setYAxisConfig);
+  const yAxisName = useEditorStore((s) => s.yAxisName);
+  const setYAxisName = useEditorStore((s) => s.setYAxisName);
   const chartType = useEditorStore((s) => s.chartType);
 
   const isPie = getBaseChartType(chartType) === "pie";
@@ -91,11 +93,12 @@ export default function SizeControl() {
         </Section>
       )}
 
-      {/* ===== Y 轴格式化 ===== */}
+      {/* ===== Y 轴控制 ===== */}
       {!isPie && (
-        <Section title="Y 轴数值">
-          {/* 格式化模式 */}
-          <div className="flex gap-1.5 mb-3">
+        <Section title="Y 轴">
+          {/* ── 数值格式化模式 ── */}
+          <p className="text-[10px] text-gray-400 mb-1.5">数值格式</p>
+          <div className="flex gap-1.5 mb-1.5">
             {([
               { id: "smart" as const,   label: "智能" },
               { id: "raw" as const,     label: "原始" },
@@ -110,28 +113,86 @@ export default function SizeControl() {
               </ToggleButton>
             ))}
           </div>
-
           <p className="text-[10px] text-gray-400 mb-3">
             {yAxisConfig.numberFormat === "smart" && "自动使用 万/亿 等单位，告别长串零"}
             {yAxisConfig.numberFormat === "raw" && "显示原始数值，不做任何转换"}
             {yAxisConfig.numberFormat === "percent" && "所有数值后追加 % 符号"}
           </p>
 
-          {/* 对数轴开关 */}
-          <div className="p-2.5 bg-amber-50/80 border border-amber-200 rounded-lg">
-            <label className="flex items-center gap-2 cursor-pointer">
+          {/* ── 单位名称 ── */}
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-[10px] text-gray-400 w-14 shrink-0">轴单位</span>
+            <input
+              type="text"
+              value={yAxisName}
+              placeholder="如：分、万元、cm"
+              onChange={(e) => setYAxisName(e.target.value)}
+              className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:border-blue-400"
+            />
+          </div>
+
+          {/* ── 自适应缩放 ── */}
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <span className="text-xs text-gray-700">自适应缩放</span>
+              <p className="text-[10px] text-gray-400">不强制从 0 开始，贴近数据范围</p>
+            </div>
+            <Switch
+              checked={yAxisConfig.autoScale}
+              disabled={yAxisConfig.useLogScale}
+              onChange={(v) => setYAxisConfig({ autoScale: v })}
+              color="blue"
+            />
+          </div>
+
+          {/* ── 强制极值 ── */}
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div>
+              <p className="text-[10px] text-gray-400 mb-1">最小值</p>
               <input
-                type="checkbox" checked={yAxisConfig.useLogScale}
-                onChange={(e) => setYAxisConfig({ useLogScale: e.target.checked })}
-                className="accent-amber-600"
+                type="number"
+                value={yAxisConfig.min ?? ""}
+                placeholder="自动"
+                disabled={yAxisConfig.useLogScale}
+                onChange={(e) =>
+                  setYAxisConfig({ min: e.target.value === "" ? null : Number(e.target.value) })
+                }
+                className="w-full px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:border-blue-400 disabled:opacity-40"
               />
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-400 mb-1">最大值</p>
+              <input
+                type="number"
+                value={yAxisConfig.max ?? ""}
+                placeholder="自动"
+                disabled={yAxisConfig.useLogScale}
+                onChange={(e) =>
+                  setYAxisConfig({ max: e.target.value === "" ? null : Number(e.target.value) })
+                }
+                className="w-full px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:border-blue-400 disabled:opacity-40"
+              />
+            </div>
+          </div>
+
+          {/* ── 对数轴开关 ── */}
+          <div className="p-2.5 bg-amber-50/80 border border-amber-200 rounded-lg">
+            <div className="flex items-center justify-between">
               <div>
                 <span className="text-xs font-medium text-amber-800">对数轴 (Log Scale)</span>
                 <p className="text-[10px] text-amber-600 mt-0.5">
                   数据差距极大时启用，让小值也清晰可见
                 </p>
               </div>
-            </label>
+              <Switch
+                checked={yAxisConfig.useLogScale}
+                onChange={(v) => {
+                  // 开启对数轴时，同步关闭自适应缩放并清空极值（log 轴有自己的处理）
+                  setYAxisConfig({ useLogScale: v, ...(v ? { autoScale: false, min: null, max: null } : {}) });
+                }}
+                color="amber"
+              />
+            </div>
           </div>
         </Section>
       )}
@@ -214,6 +275,39 @@ function ToggleButton({
       }`}
     >
       {children}
+    </button>
+  );
+}
+
+/** 开关按钮（iOS 风格） */
+function Switch({
+  checked,
+  onChange,
+  disabled = false,
+  color = "blue",
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+  color?: "blue" | "amber";
+}) {
+  const trackOn = color === "amber" ? "bg-amber-500" : "bg-blue-500";
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer ${
+        checked ? trackOn : "bg-gray-200"
+      }`}
+    >
+      <span
+        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${
+          checked ? "translate-x-4" : "translate-x-0.5"
+        }`}
+      />
     </button>
   );
 }

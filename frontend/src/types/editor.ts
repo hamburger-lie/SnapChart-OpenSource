@@ -39,6 +39,12 @@ export interface YAxisConfig {
   useLogScale: boolean;
   /** 数值格式化模式：raw=原始值 / smart=智能K/万/亿 / percent=百分比 */
   numberFormat: "raw" | "smart" | "percent";
+  /** 自适应缩放：true 时轴不强制从 0 开始，贴近数据真实范围 */
+  autoScale: boolean;
+  /** 强制最小值（null = 交由 ECharts 自动计算） */
+  min: number | null;
+  /** 强制最大值（null = 交由 ECharts 自动计算） */
+  max: number | null;
 }
 
 /** 右侧面板 Tab 类型 */

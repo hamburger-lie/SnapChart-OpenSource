@@ -41,6 +41,9 @@ export interface ChartStyleSlice {
   // 图例
   legend: LegendConfig;
   setLegend: (config: Partial<LegendConfig>) => void;
+  /** 用户在画布上点击图例后的选中状态（key = 系列名，value = 是否可见） */
+  legendSelected: Record<string, boolean>;
+  setLegendSelected: (selected: Record<string, boolean>) => void;
 
   // 网格
   gridPadding: GridPadding;
@@ -90,13 +93,15 @@ export const createChartStyleSlice: StateCreator<ChartStyleSlice> = (set) => ({
 
   legend: { show: true, position: "top" },
   setLegend: (config) => set((s) => ({ legend: { ...s.legend, ...config } })),
+  legendSelected: {},
+  setLegendSelected: (legendSelected) => set({ legendSelected }),
 
   gridPadding: { top: 90, right: 30, bottom: 16, left: 20 },
   setGridPadding: (padding) =>
     set((s) => ({ gridPadding: { ...s.gridPadding, ...padding } })),
 
   xAxisConfig: { labelMaxLength: 8, labelRotate: 0, autoRotate: true },
-  yAxisConfig: { useLogScale: false, numberFormat: "smart" },
+  yAxisConfig: { useLogScale: false, numberFormat: "smart", autoScale: false, min: null, max: null },
   setXAxisConfig: (config) =>
     set((s) => ({ xAxisConfig: { ...s.xAxisConfig, ...config } })),
   setYAxisConfig: (config) =>

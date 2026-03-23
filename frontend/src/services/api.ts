@@ -3,7 +3,7 @@
  * 封装与后端的所有网络通信，统一处理请求和错误
  */
 
-import type { ChartResponse, StyleCreate, StyleListItem, StyleResponse } from "../types/chart";
+import type { ChartResponse, SharedChartData, StyleCreate, StyleListItem, StyleResponse } from "../types/chart";
 
 const API_BASE = "/api";
 
@@ -94,6 +94,30 @@ export async function deleteStyleApi(id: string): Promise<void> {
     method: "DELETE",
   });
   if (!response.ok) throw new Error("删除样式失败");
+}
+
+// ========== Agent 共享图表 ==========
+
+/**
+ * 获取 Agent 创建的共享图表数据（无需鉴权）
+ * 对应后端 GET /api/agent/chart/{uuid}
+ */
+export async function fetchSharedChart(uuid: string): Promise<SharedChartData> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/agent/chart/${uuid}`);
+  } catch {
+    throw new Error("无法连接到服务器");
+  }
+
+  if (response.status === 404) {
+    throw new Error("CHART_NOT_FOUND");
+  }
+  if (!response.ok) {
+    throw new Error(`获取图表数据失败（${response.status}）`);
+  }
+
+  return response.json() as Promise<SharedChartData>;
 }
 
 /**

@@ -129,7 +129,7 @@ function buildToolbox(title: string) {
   };
 }
 
-function buildLegend(config: LegendConfig) {
+function buildLegend(config: LegendConfig, selected: Record<string, boolean>) {
   if (!config.show) return { show: false };
   const posMap = {
     top:    { top: 48, left: "center" },
@@ -141,6 +141,8 @@ function buildLegend(config: LegendConfig) {
     show: true, ...posMap[config.position],
     textStyle: { color: "#64748b", fontSize: 13 },
     itemWidth: 14, itemHeight: 10, itemGap: 16,
+    // 将 store 中记录的点击状态回填，防止 notMerge:true 重置用户的图例选择
+    selected: Object.keys(selected).length > 0 ? selected : undefined,
   };
 }
 
@@ -178,9 +180,33 @@ function buildXAxis(labels: string[], xConfig: XAxisConfig, xAxisName?: string) 
 }
 
 function buildYAxis(yConfig: YAxisConfig, yAxisName?: string) {
+  if (yConfig.useLogScale) {
+    // 对数轴：固定从 1 开始，忽略 autoScale / min / max（log 轴自行处理）
+    return {
+      type: "log" as const,
+      logBase: 10,
+      min: 1,
+      axisLabel: {
+        color: "#94a3b8",
+        fontSize: 12,
+        formatter: (val: number) => formatNumber(val, yConfig.numberFormat),
+      },
+      splitLine: { lineStyle: { color: "#f1f5f9", type: "dashed" as const } },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      name: yAxisName || undefined,
+      nameTextStyle: { color: "#94a3b8", fontSize: 12, padding: [0, 0, 8, 0] },
+    };
+  }
+
+  // 线性轴：精确映射三个新控制项
   return {
-    type: (yConfig.useLogScale ? "log" : "value") as "value" | "log",
-    ...(yConfig.useLogScale ? { logBase: 10, min: 1 } : {}),
+    type: "value" as const,
+    // scale: true → 轴不强制从 0 开始（仅在未手动设置 min 时生效）
+    scale: yConfig.autoScale && yConfig.min === null,
+    // 强制极值（null → undefined → 交由 ECharts 自动计算）
+    min: yConfig.min !== null ? yConfig.min : undefined,
+    max: yConfig.max !== null ? yConfig.max : undefined,
     axisLabel: {
       color: "#94a3b8",
       fontSize: 12,
@@ -417,6 +443,7 @@ function buildFullOption(
   titleStyle: TitleStyle,
   colors: string[],
   legend: LegendConfig,
+  legendSelected: Record<string, boolean>,
   gridPadding: GridPadding,
   xAxisConfig: XAxisConfig,
   yAxisConfig: YAxisConfig,
@@ -457,6 +484,7 @@ function buildFullOption(
         textStyle: { color: "#64748b", fontSize: 12 },
         itemWidth: 12, itemHeight: 12, itemGap: 12,
         formatter: (name: string) => truncateLabel(name, xAxisConfig.labelMaxLength + 4),
+        selected: Object.keys(legendSelected).length > 0 ? legendSelected : undefined,
       },
       series: (pieBuildMap[chartType] || pieBuildMap.pie)(),
     };
@@ -483,7 +511,7 @@ function buildFullOption(
   return {
     ...base,
     tooltip: buildTooltip(baseType === "scatter" ? "item" : "axis", yAxisConfig.numberFormat),
-    legend: buildLegend(legend),
+    legend: buildLegend(legend, legendSelected),
     grid: buildGrid(gridPadding),
     xAxis: buildXAxis(labels, xAxisConfig, xAxisName),
     yAxis: buildYAxis(yAxisConfig, yAxisName),
@@ -497,6 +525,8 @@ function buildFullOption(
 export default function EditableChart() {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<echarts.ECharts | null>(null);
+  // 记录上一次的系列名，用于检测名称变更（触发 legendSelected 重置）
+  const prevDatasetNamesRef = useRef<string[]>([]);
 
   // 从 store 读取所有状态
   const labels = useEditorStore((s) => s.labels);
@@ -507,6 +537,8 @@ export default function EditableChart() {
   const titleStyle = useEditorStore((s) => s.titleStyle);
   const colors = useEditorStore((s) => s.colors);
   const legend = useEditorStore((s) => s.legend);
+  const legendSelected = useEditorStore((s) => s.legendSelected);
+  const setLegendSelected = useEditorStore((s) => s.setLegendSelected);
   const gridPadding = useEditorStore((s) => s.gridPadding);
   const chartHeight = useEditorStore((s) => s.chartHeight);
   const xAxisConfig = useEditorStore((s) => s.xAxisConfig);
@@ -557,17 +589,14 @@ export default function EditableChart() {
     };
   }, []);
 
-  // 数据变化时自动检测是否需要对数轴
+  // 数据变化时自动检测是否需要对数轴（仅在用户未手动开启时干预）
   useEffect(() => {
     if (datasets.length > 0 && getBaseChartType(chartType) !== "pie") {
       const isSkewed = detectDataSkew(datasets);
-      // 仅在检测到极端悬殊且当前不是对数轴时自动提示
       if (isSkewed && !yAxisConfig.useLogScale) {
-        // 自动启用对数轴
-        setYAxisConfig({ useLogScale: true });
+        setYAxisConfig({ useLogScale: true, autoScale: false, min: null, max: null });
         console.log("📊 检测到极端数据悬殊，已自动启用对数轴");
       } else if (!isSkewed && yAxisConfig.useLogScale) {
-        // 数据正常时自动关闭对数轴
         setYAxisConfig({ useLogScale: false });
       }
     }
@@ -577,11 +606,36 @@ export default function EditableChart() {
   useEffect(() => {
     if (!chartInstance.current || labels.length === 0) return;
     const option = buildFullOption(
-      chartType, labels, datasets, title, subtitle, titleStyle, colors, legend, gridPadding,
-      xAxisConfig, yAxisConfig, xAxisName, yAxisName,
+      chartType, labels, datasets, title, subtitle, titleStyle, colors, legend, legendSelected,
+      gridPadding, xAxisConfig, yAxisConfig, xAxisName, yAxisName,
     );
     chartInstance.current.setOption(option, { notMerge: true });
-  }, [labels, datasets, chartType, title, subtitle, titleStyle, colors, legend, gridPadding, xAxisConfig, yAxisConfig, xAxisName, yAxisName]);
+  }, [labels, datasets, chartType, title, subtitle, titleStyle, colors, legend, legendSelected, gridPadding, xAxisConfig, yAxisConfig, xAxisName, yAxisName]);
+
+  // 监听用户点击图例 → 将 ECharts 内部 selected 状态提升到 store
+  // 这是防止 notMerge:true 每次重绘时重置图例选中状态的关键
+  useEffect(() => {
+    if (!chartInstance.current) return;
+    const onLegendChange = (params: { selected: Record<string, boolean> }) => {
+      setLegendSelected({ ...params.selected });
+    };
+    chartInstance.current.on("legendselectchanged", onLegendChange);
+    return () => { chartInstance.current?.off("legendselectchanged", onLegendChange); };
+  }, [setLegendSelected]);
+
+  // 当数据系列名称发生变化时（新上传、重命名、增删系列），重置 legendSelected
+  // 避免旧系列名的 key 污染新图表的显示状态
+  useEffect(() => {
+    const currentNames = datasets.map((ds) => ds.name);
+    const prev = prevDatasetNamesRef.current;
+    const changed =
+      currentNames.length !== prev.length ||
+      currentNames.some((n, i) => n !== prev[i]);
+    if (changed) {
+      setLegendSelected({});
+      prevDatasetNamesRef.current = currentNames;
+    }
+  }, [datasets, setLegendSelected]);
 
   // 编辑模式下监听标题点击
   useEffect(() => {
