@@ -1,0 +1,158 @@
+"""
+AI Agent OpenAPI 专属通道
+提供给第三方 AI 智能体（Coze、Dify、n8n 等）调用的图表创建接口。
+
+设计原则：
+  - POST /api/agent/create-chart  需携带 X-API-Key 鉴权
+  - GET  /api/agent/chart/{uuid}  无需鉴权，前端只读页面调用
+"""
+
+import logging
+import uuid as uuid_lib
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Security
+from fastapi.security.api_key import APIKeyHeader
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import settings
+from app.models.database import get_db
+from app.models.shared_chart_model import SharedChart
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/agent", tags=["Agent OpenAPI"])
+
+# ========== API Key 鉴权 ==========
+
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def _verify_api_key(api_key: str = Security(_api_key_header)) -> str:
+    """FastAPI 依赖注入：校验 X-API-Key 请求头"""
+    if not api_key or api_key != settings.agent_api_key:
+        raise HTTPException(
+            status_code=401,
+            detail="缺少或无效的 API Key，请在请求头中携带 X-API-Key",
+        )
+    return api_key
+
+
+# ========== Pydantic 数据模型 ==========
+
+
+class DatasetItemPayload(BaseModel):
+    """单个数据系列"""
+    name: str = Field(..., description="系列名称，如 '销量'、'营收'")
+    values: list[float] = Field(..., description="数值列表，与 labels 一一对应")
+
+
+class CreateChartRequest(BaseModel):
+    """Agent 创建图表的请求体"""
+    chartType: str = Field(
+        ...,
+        description="图表类型：bar / line / pie / stackedBar / doughnut / rose 等",
+        examples=["bar"],
+    )
+    title: str = Field(..., min_length=1, max_length=200, description="图表标题")
+    labels: list[str] = Field(..., min_length=1, description="X 轴标签或饼图分类")
+    datasets: list[DatasetItemPayload] = Field(..., min_length=1, description="数据系列列表")
+    theme: dict | None = Field(
+        default=None,
+        description="可选主题配置，如 {\"colors\": [\"#2563eb\", \"#16a34a\"]}",
+    )
+
+
+class CreateChartResponse(BaseModel):
+    """创建成功的响应"""
+    status: str = "success"
+    uuid: str = Field(..., description="图表唯一标识符")
+    shareUrl: str = Field(..., description="可直接分享给用户的只读链接")
+
+
+class DatasetItemOut(BaseModel):
+    """返回给前端的数据系列"""
+    name: str
+    values: list[float]
+
+
+class SharedChartResponse(BaseModel):
+    """GET 接口返回的完整图表数据"""
+    uuid: str
+    chartType: str
+    title: str
+    labels: list[str]
+    datasets: list[DatasetItemOut]
+    theme: dict | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ========== 路由 ==========
+
+
+@router.post(
+    "/create-chart",
+    response_model=CreateChartResponse,
+    summary="[鉴权] Agent 创建共享图表",
+    description=(
+        "接收结构化 JSON 图表数据，持久化后返回唯一分享链接。\n\n"
+        "**鉴权要求**：请求头必须携带 `X-API-Key`，值与服务端 `AGENT_API_KEY` 环境变量一致。"
+    ),
+)
+async def create_chart(
+    payload: CreateChartRequest,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(_verify_api_key),
+):
+    """Agent 调用此接口创建一张可分享的只读图表"""
+    chart_uuid = str(uuid_lib.uuid4())
+
+    record = SharedChart(
+        uuid=chart_uuid,
+        chart_type=payload.chartType,
+        title=payload.title,
+        labels=payload.labels,
+        datasets=[ds.model_dump() for ds in payload.datasets],
+        theme=payload.theme,
+    )
+    db.add(record)
+    await db.commit()
+
+    share_url = f"{settings.frontend_base_url}/share/{chart_uuid}"
+    logger.info("Agent 图表已创建：uuid=%s  url=%s", chart_uuid, share_url)
+
+    return CreateChartResponse(uuid=chart_uuid, shareUrl=share_url)
+
+
+@router.get(
+    "/chart/{uuid}",
+    response_model=SharedChartResponse,
+    summary="[公开] 获取共享图表数据",
+    description=(
+        "无需鉴权。前端 `/share/:uuid` 只读页面通过此接口拉取图表数据。\n\n"
+        "如果 UUID 不存在，返回 404。"
+    ),
+)
+async def get_chart(uuid: str, db: AsyncSession = Depends(get_db)):
+    """前端只读页面拉取图表数据，无需 API Key"""
+    result = await db.execute(
+        select(SharedChart).where(SharedChart.uuid == uuid)
+    )
+    chart = result.scalar_one_or_none()
+
+    if not chart:
+        raise HTTPException(status_code=404, detail=f"图表不存在：{uuid}")
+
+    return SharedChartResponse(
+        uuid=chart.uuid,
+        chartType=chart.chart_type,
+        title=chart.title,
+        labels=chart.labels,
+        datasets=[DatasetItemOut(**ds) for ds in chart.datasets],
+        theme=chart.theme,
+        created_at=chart.created_at,
+    )
