@@ -442,15 +442,19 @@ function buildOption(chartData) {
   const {
     chartType = 'bar',
     title = '',
-    colors = DEFAULT_COLORS,
     rawOption = null,
   } = chartData;
+
+  // 仅在用户显式传入 colors 时覆盖主题色；未传时让 ECharts 主题接管
+  const hasCustomColors = Array.isArray(chartData.colors) && chartData.colors.length > 0;
+  const colors = hasCustomColors ? chartData.colors : DEFAULT_COLORS;
 
   // 防爆清洗
   const { labels, datasets } = sanitizeChartData(chartData.labels, chartData.datasets);
 
   const baseOption = {
-    color: colors,
+    // 有主题时不设 color，让主题色生效；有自定义色或无主题时显式设置
+    ...((!chartData.theme || hasCustomColors) ? { color: colors } : {}),
     title: {
       text: title,
       left: 'center',
