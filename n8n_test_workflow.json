@@ -1,0 +1,152 @@
+{
+  "name": "SnapChart API 完整测试（含图片）",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "10000000-0000-4000-8000-000000000001",
+      "name": "点击开始测试",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/agent/create-chart",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "sk-wxgInpoDpWFxF-tskvIxFQaXUAzd5Nrl"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"chartType\": \"bar\",\n  \"title\": \"2026年Q1销售数据\",\n  \"labels\": [\"一月\", \"二月\", \"三月\", \"四月\", \"五月\", \"六月\"],\n  \"datasets\": [\n    {\"name\": \"营收\", \"values\": [12000, 15000, 18000, 22000, 19000, 25000]},\n    {\"name\": \"成本\", \"values\": [8000, 9500, 11000, 13000, 12000, 15000]},\n    {\"name\": \"利润\", \"values\": [4000, 5500, 7000, 9000, 7000, 10000]}\n  ]\n}",
+        "options": {}
+      },
+      "id": "20000000-0000-4000-8000-000000000002",
+      "name": "创建图表",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://host.docker.internal:8000/api/agent/chart/{{ $json.uuid }}/image",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "sk-wxgInpoDpWFxF-tskvIxFQaXUAzd5Nrl"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "30000000-0000-4000-8000-000000000003",
+      "name": "获取图表截图",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r1",
+              "name": "测试结果",
+              "value": "✅ API 全流程通过",
+              "type": "string"
+            },
+            {
+              "id": "r2",
+              "name": "图表UUID",
+              "value": "={{ $('创建图表').item.json.uuid }}",
+              "type": "string"
+            },
+            {
+              "id": "r3",
+              "name": "分享链接",
+              "value": "={{ $('创建图表').item.json.shareUrl }}",
+              "type": "string"
+            },
+            {
+              "id": "r4",
+              "name": "图片大小",
+              "value": "={{ $json.data ? $json.data.length + ' bytes' : '已获取' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "40000000-0000-4000-8000-000000000004",
+      "name": "测试结果",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [920, 300]
+    }
+  ],
+  "connections": {
+    "点击开始测试": {
+      "main": [
+        [
+          {
+            "node": "创建图表",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "创建图表": {
+      "main": [
+        [
+          {
+            "node": "获取图表截图",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "获取图表截图": {
+      "main": [
+        [
+          {
+            "node": "测试结果",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "snapchart-test"
+  }
+}

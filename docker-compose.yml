@@ -1,13 +1,36 @@
-version: "3.9"
-
 # ==============================================================
-# SnapChart — 生产环境服务编排
-# 服务：backend (FastAPI) + frontend (Nginx + React)
+# SnapChart — 生产环境 Docker Compose (SSR 架构)
+# 服务：ssr-service (ECharts SSR) + backend (FastAPI) + frontend (Nginx)
+#
+# 架构：
+#   Client → Nginx(80) → FastAPI(8000) → Node SSR(3100) → SVG → Cairo → PNG
+#
+# 部署：
+#   1. 复制 backend/.env.example → backend/.env
+#   2. docker-compose up -d --build
 # ==============================================================
 
 services:
 
-  # ---- 后端服务 ----
+  # ---- ECharts SSR 渲染引擎（~80MB，极速出图） ----
+  ssr-service:
+    build:
+      context: ./ssr-service
+      dockerfile: Dockerfile
+    container_name: snapchart-ssr
+    restart: unless-stopped
+    expose:
+      - "3100"
+    networks:
+      - snapchart-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3100/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # ---- 后端服务（~250MB，鉴权+扣费+SVG→PNG） ----
   backend:
     build:
       context: ./backend
@@ -15,23 +38,26 @@ services:
     container_name: snapchart-backend
     restart: unless-stopped
     environment:
-      # ⚠️ 生产环境必须修改的变量 ↓
-      CORS_ORIGINS: "http://localhost,http://your-domain.com"   # 改为实际域名
-      # 可选覆盖项（有默认值，按需调整）
+      ENVIRONMENT: "dev"
+      CORS_ORIGINS: "http://localhost,http://your-domain.com"
+      FRONTEND_BASE_URL: "http://your-domain.com"
+      AGENT_API_KEY: "change-me-in-production"
+      SSR_SERVICE_URL: "http://ssr-service:3100"
       APP_HOST: "0.0.0.0"
       APP_PORT: "8000"
       MAX_FILE_SIZE_MB: "20"
       DATABASE_URL: "sqlite+aiosqlite:////app/data/styles.db"
       UPLOAD_DIR: "/app/uploads"
     volumes:
-      # 持久化 SQLite 数据库和上传文件，防止容器重建数据丢失
-      - snapchart-db:/app/data
-      - snapchart-uploads:/app/uploads
+      - ./backend/data:/app/data
+      - ./backend/uploads:/app/uploads
     networks:
       - snapchart-net
-    # 后端不对外暴露端口；所有流量经由 Nginx 代理进入
     expose:
       - "8000"
+    depends_on:
+      ssr-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 30s
@@ -39,7 +65,7 @@ services:
       retries: 3
       start_period: 15s
 
-  # ---- 前端服务 ----
+  # ---- 前端服务（Nginx + React SPA） ----
   frontend:
     build:
       context: ./frontend
@@ -47,19 +73,13 @@ services:
     container_name: snapchart-frontend
     restart: unless-stopped
     ports:
-      - "80:80"     # ⚠️ 如需 HTTPS，改为在此前加 Nginx/Caddy 反代，或改用 443
+      - "80:80"
     networks:
       - snapchart-net
     depends_on:
       backend:
         condition: service_healthy
 
-# ---- 持久化卷 ----
-volumes:
-  snapchart-db:       # SQLite 数据库文件
-  snapchart-uploads:  # 用户上传的原始文件
-
-# ---- 内部网络 ----
 networks:
   snapchart-net:
     driver: bridge

@@ -19,3 +19,7 @@ export const useEditorStore = create<EditorStore>()((...a) => ({
   ...createUISlice(...a),
   ...createStyleLibSlice(...a),
 }));
+
+// 开发环境暴露 store 便于调试
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+if (import.meta.env.DEV) (window as any).__STORE__ = useEditorStore;

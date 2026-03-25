@@ -10,6 +10,9 @@ export interface ChartDataSlice {
   // 数据状态
   labels: string[];
   datasets: DatasetItem[];
+  /** 桑基图/旭日图等特殊图表的原始 ECharts option 片段 */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rawOption: Record<string, any> | null;
 
   // 数据操作
   setLabels: (labels: string[]) => void;
@@ -23,11 +26,20 @@ export interface ChartDataSlice {
 
   /** 从后端上传数据导入 */
   importFromUpload: (data: ChartData) => void;
+
+  /** 从结构模板加载数据（含可选 rawOption） */
+  loadStructureData: (data: {
+    labels: string[];
+    datasets: DatasetItem[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rawOption?: Record<string, any> | null;
+  }) => void;
 }
 
 export const createChartDataSlice: StateCreator<ChartDataSlice> = (set) => ({
   labels: [],
   datasets: [],
+  rawOption: null,
 
   setLabels: (labels) => set({ labels }),
 
@@ -92,5 +104,13 @@ export const createChartDataSlice: StateCreator<ChartDataSlice> = (set) => ({
     set({
       labels: data.labels,
       datasets: data.datasets,
+      rawOption: null,
+    }),
+
+  loadStructureData: (data) =>
+    set({
+      labels: data.labels,
+      datasets: data.datasets,
+      rawOption: data.rawOption ?? null,
     }),
 });

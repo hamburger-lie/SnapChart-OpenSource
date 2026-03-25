@@ -6,7 +6,7 @@
 import type { StateCreator } from "zustand";
 import type { DisplayChartType, ColorThemeId } from "../../types/chart";
 import type { TitleStyle, LegendConfig, GridPadding, XAxisConfig, YAxisConfig } from "../../types/editor";
-import { COLOR_THEMES } from "../../constants/themes";
+import { COLOR_THEMES, ALL_THEMES } from "../../constants/themes";
 
 export interface ChartStyleSlice {
   chartType: DisplayChartType;
@@ -26,12 +26,16 @@ export interface ChartStyleSlice {
   setXAxisName: (name: string) => void;
   setYAxisName: (name: string) => void;
 
-  // 颜色
+  // 颜色 + 主题
   colors: string[];
   colorThemeId: ColorThemeId;
+  /** 完整主题 ID（包含 ECharts 主题对象的，如 "brand-pro"、"macarons" 等） */
+  fullThemeId: string | null;
   setColor: (index: number, color: string) => void;
   setColors: (colors: string[]) => void;
   applyColorTheme: (themeId: ColorThemeId) => void;
+  /** 切换到完整 ECharts 主题（会同时更新 colors） */
+  applyFullTheme: (themeId: string) => void;
 
   // 尺寸
   chartWidth: number;
@@ -75,16 +79,21 @@ export const createChartStyleSlice: StateCreator<ChartStyleSlice> = (set) => ({
 
   colors: COLOR_THEMES[0].colors,
   colorThemeId: "business",
+  fullThemeId: null,
   setColor: (index, color) =>
     set((s) => {
       const colors = [...s.colors];
       colors[index] = color;
-      return { colors, colorThemeId: "business" as ColorThemeId };
+      return { colors, colorThemeId: "business" as ColorThemeId, fullThemeId: null };
     }),
-  setColors: (colors) => set({ colors }),
+  setColors: (colors) => set({ colors, fullThemeId: null }),
   applyColorTheme: (themeId) => {
     const theme = COLOR_THEMES.find((t) => t.id === themeId);
-    if (theme) set({ colors: [...theme.colors], colorThemeId: themeId });
+    if (theme) set({ colors: [...theme.colors], colorThemeId: themeId, fullThemeId: null });
+  },
+  applyFullTheme: (themeId) => {
+    const theme = ALL_THEMES.find((t) => t.id === themeId);
+    if (theme) set({ colors: [...theme.colors], fullThemeId: themeId });
   },
 
   chartWidth: 0,

@@ -7,9 +7,10 @@ import logging
 import os
 import uuid
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, HTTPException, Request, UploadFile
 
 from app.config import settings
+from app.rate_limit import limiter
 from app.models.schemas import ChartResponse, ErrorResponse
 from app.services.data_parser import parse_to_chart_data
 
@@ -44,7 +45,8 @@ ALLOWED_EXTENSIONS = {".xlsx", ".xls", ".csv"}
     summary="上传表格文件并解析为图表数据",
     description="上传 Excel (.xlsx) 或 CSV (.csv) 文件，系统自动提取数据并返回结构化的图表 JSON 配置。",
 )
-async def upload_and_parse(file: UploadFile):
+@limiter.limit("10/minute")
+async def upload_and_parse(request: Request, file: UploadFile):
     """
     核心接口：上传表格 → 解析数据 → 返回图表 JSON
 

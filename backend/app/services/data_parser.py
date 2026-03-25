@@ -10,6 +10,7 @@
 """
 
 import logging
+import re
 
 import pandas as pd
 
@@ -171,6 +172,20 @@ def parse_to_chart_data(file_path: str, content_type: str) -> dict:
         logger.warning("数据行数 %d 超过上限，仅取前 100 行", len(df))
         df = df.head(100)
 
+    # ── 第二步半：智能清洗表头 ─────────────────────────────────────────
+    # 去除括号及里面的说明文字，去除换行符和多余空白
+    def clean_col_name(name: str) -> str:
+        if not isinstance(name, str):
+            return str(name)
+        # 移除中文或英文括号及其内部的全部内容
+        name = re.sub(r'[\(（].*?[\)）]', '', name)
+        # 移除换行符、回车符和所有空白字符
+        name = re.sub(r'\s+', '', name)
+        return name
+
+    df.rename(columns=clean_col_name, inplace=True)
+    logger.info("表头清洗后列名：%s", df.columns.tolist())
+
     # ── 第三步：识别原始列类型 ─────────────────────────────────────────
     all_numeric_cols: list[str] = df.select_dtypes(include=["number"]).columns.tolist()
     non_numeric_cols: list[str] = df.select_dtypes(exclude=["number"]).columns.tolist()
@@ -196,11 +211,40 @@ def parse_to_chart_data(file_path: str, content_type: str) -> dict:
     # ── 第五步：智能确定标签列 ─────────────────────────────────────────
     # 标签列候选：非数值列 + 被过滤掉的伪数值列（如"学号"可转为字符串标签）
     label_candidates = non_numeric_cols + pseudo_cols
-    label_col = _find_label_col(label_candidates, df.columns.tolist())
 
-    if label_col:
+    if label_candidates:
+        # 智能寻找最具区分度的文本列作为 X 轴（比如"姓名"而非"班级"）
+        # 优先：语义关键字匹配的列
+        label_col = _find_label_col(label_candidates, df.columns.tolist())
+
+        if not label_col:
+            # 兜底：取唯一值最多的列（信息熵最高）
+            best_col = label_candidates[0]
+            max_unique = -1
+            for col in label_candidates:
+                unique_count = df[col].nunique()
+                if unique_count > max_unique:
+                    max_unique = unique_count
+                    best_col = col
+            label_col = best_col
+        else:
+            # 语义匹配到了，但如果匹配的列区分度极低（如全是同一个班级名），
+            # 则切换到唯一值最多的列
+            matched_unique = df[label_col].nunique()
+            best_col = label_col
+            max_unique = matched_unique
+            for col in label_candidates:
+                unique_count = df[col].nunique()
+                if unique_count > max_unique:
+                    max_unique = unique_count
+                    best_col = col
+            if max_unique > matched_unique * 2:
+                logger.info("语义列 '%s' 区分度不足（%d），切换为 '%s'（%d）",
+                            label_col, matched_unique, best_col, max_unique)
+                label_col = best_col
+
         labels = df[label_col].astype(str).tolist()
-        logger.info("标签列：%s（共 %d 项）", label_col, len(labels))
+        logger.info("标签列：%s（共 %d 项，唯一值 %d）", label_col, len(labels), df[label_col].nunique())
     else:
         # 全是有效数值列 → 用行号兜底
         label_col = "__index__"

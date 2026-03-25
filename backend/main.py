@@ -10,12 +10,16 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
+
+from app.rate_limit import limiter
 
 from app.config import settings
 from app.models.database import init_db
 from app.routers import chart, style
-from app.routers import agent_api
+from app.routers import agent_api, admin_api
 # 确保 ORM 模型在 init_db 前已导入，使其表结构被注册到 Base.metadata
 from app.models import shared_chart_model as _  # noqa: F401
 from app.models.api_key_model import ApiKey  # noqa: F401 — 确保 SQLAlchemy 注册表结构
@@ -28,10 +32,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期管理：启动时初始化数据库"""
+    """应用生命周期管理：启动时校验配置 + 初始化数据库"""
+    settings.validate_production()
+    logger.info("运行环境：%s", settings.environment.upper())
     logger.info("正在初始化数据库...")
     await init_db()
     logger.info("数据库初始化完成")
@@ -46,17 +51,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# 上传体积限制中间件（5MB）
-MAX_BODY_SIZE = 5 * 1024 * 1024  # 5MB
+# 挂载速率限制器
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-
+# 上传体积限制中间件（从配置读取，不再硬编码）
 class LimitUploadSizeMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         content_length = request.headers.get("content-length")
-        if content_length and int(content_length) > MAX_BODY_SIZE:
+        if content_length and int(content_length) > settings.max_file_size_bytes:
             return JSONResponse(
                 status_code=413,
-                content={"detail": "文件大小不能超过 5MB"},
+                content={
+                    "detail": f"文件大小不能超过 {settings.max_file_size_mb}MB"
+                },
             )
         return await call_next(request)
 
@@ -75,7 +83,8 @@ app.add_middleware(
 # 注册路由模块
 app.include_router(chart.router)
 app.include_router(style.router)
-app.include_router(agent_api.router)  # AI Agent OpenAPI 专属通道
+app.include_router(agent_api.router)   # AI Agent OpenAPI 专属通道
+app.include_router(admin_api.router)  # Admin 管理后台 API
 
 
 @app.get("/", tags=["系统"])
@@ -85,6 +94,7 @@ async def root():
         "service": "SnapChart",
         "version": "2.0.0",
         "status": "running",
+        "environment": settings.environment,
     }
 
 
@@ -100,5 +110,5 @@ if __name__ == "__main__":
         "main:app",
         host=settings.app_host,
         port=settings.app_port,
-        reload=True,
+        reload=not settings.is_production,
     )

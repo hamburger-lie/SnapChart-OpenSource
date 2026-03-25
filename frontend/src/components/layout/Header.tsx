@@ -15,33 +15,95 @@ export default function Header({ onUploadClick }: HeaderProps) {
   const isEditMode = useEditorStore((s) => s.isEditMode);
   const toggleEditMode = useEditorStore((s) => s.toggleEditMode);
   const resetAll = useEditorStore((s) => s.resetAll);
-  const title = useEditorStore((s) => s.title);
 
   const isEditorView = appStatus === "success";
 
-  /** 高清导出函数：强制 pixelRatio=3，不受浏览器缩放影响 */
+  /**
+   * 高清导出函数 —— 影子图层策略
+   * 1:1 复制主实例的尺寸和全部配置，唯一改动是物理删除未选中的系列和图例。
+   * 从影子实例截图后立即销毁，主图表完全不受影响。
+   */
   const handleExportHD = () => {
-    // 查找 ECharts 实例所在的容器
-    const chartDom = document.querySelector("[data-echarts-container]") as HTMLDivElement | null;
-    if (!chartDom) return;
-
-    // 通过 ECharts 全局 API 获取实例
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const echartsLib = (window as any).__ECHARTS_INSTANCE__;
-    if (!echartsLib) return;
+    const mainInstance = (window as any).__ECHARTS_INSTANCE__;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const echartsLib = (window as any).__ECHARTS_LIB__;
+    if (!mainInstance || !echartsLib) return;
 
-    const dataURL = echartsLib.getDataURL({
-      type: "png",
-      pixelRatio: 3,
-      backgroundColor: "#fff",
-      excludeComponents: ["toolbox"],
+    // 1. 获取主实例的实际渲染尺寸（与屏幕上看到的完全一致）
+    const mainWidth = mainInstance.getWidth();
+    const mainHeight = mainInstance.getHeight();
+
+    // 2. 从主实例获取当前完整配置
+    const rawOption = mainInstance.getOption();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const legendSelected: Record<string, boolean> =
+      (rawOption.legend?.[0]?.selected as any) || {};
+
+    // 3. 深拷贝配置，用于影子实例（保留所有布局参数，不做任何覆盖）
+    const shadowOption = JSON.parse(JSON.stringify(rawOption));
+
+    // 4.【核心】仅保留被选中的系列
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    shadowOption.series = shadowOption.series.filter((s: any) => {
+      return legendSelected[s.name] !== false;
     });
 
-    // 创建下载链接
-    const link = document.createElement("a");
-    link.href = dataURL;
-    link.download = `${title || "chart"}_HD.png`;
-    link.click();
+    // 5. 同步过滤图例 data，使图例栏也只显示选中项（无灰色文字）
+    if (shadowOption.legend?.[0]?.data) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      shadowOption.legend[0].data = shadowOption.legend[0].data.filter((item: any) => {
+        const name = typeof item === "string" ? item : item?.name;
+        return legendSelected[name] !== false;
+      });
+      // 清除 selected 映射，因为已经物理移除了未选中项
+      delete shadowOption.legend[0].selected;
+    }
+
+    // 6. 隐藏工具栏（导出不需要）
+    if (shadowOption.toolbox?.[0]) {
+      shadowOption.toolbox[0].show = false;
+    }
+
+    // 7. 关闭动画，加速渲染
+    shadowOption.animation = false;
+
+    // 8. 创建与主实例同尺寸的隐藏影子容器
+    const shadowDiv = document.createElement("div");
+    shadowDiv.style.cssText =
+      `position:fixed;left:-9999px;top:-9999px;width:${mainWidth}px;height:${mainHeight}px;pointer-events:none;opacity:0;`;
+    document.body.appendChild(shadowDiv);
+
+    // 9. 在影子容器中初始化临时 ECharts 实例（与主实例完全同尺寸）
+    const shadowInstance = echartsLib.init(shadowDiv, undefined, {
+      renderer: "canvas",
+      width: mainWidth,
+      height: mainHeight,
+    });
+
+    // 10. 渲染影子实例（配置与主实例一致，只是少了未选中的系列）
+    shadowInstance.setOption(shadowOption);
+
+    // 11. 等待渲染完成后截图
+    setTimeout(() => {
+      try {
+        const dataURL = shadowInstance.getDataURL({
+          type: "png",
+          pixelRatio: 3,
+          backgroundColor: "#fff",
+        });
+
+        // 12. 触发下载
+        const link = document.createElement("a");
+        link.href = dataURL;
+        link.download = `${useEditorStore.getState().title || "chart"}_HD.png`;
+        link.click();
+      } finally {
+        // 13. 销毁影子实例 + 移除容器
+        shadowInstance.dispose();
+        document.body.removeChild(shadowDiv);
+      }
+    }, 100);
   };
 
   return (

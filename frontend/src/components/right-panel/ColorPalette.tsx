@@ -1,18 +1,20 @@
 /**
  * 色彩控制面板
- * 预设主题快速切换 + 单个颜色自定义编辑（react-colorful 调色盘）
+ * 纯色彩主题 + 完整 ECharts 主题 + 单个颜色自定义编辑
  */
 
 import { useState } from "react";
 import { HexColorPicker } from "react-colorful";
 import { useEditorStore } from "../../store";
-import { COLOR_THEMES } from "../../constants/themes";
+import { COLOR_THEMES, FULL_THEMES } from "../../constants/themes";
 
 export default function ColorPalette() {
   const colors = useEditorStore((s) => s.colors);
   const colorThemeId = useEditorStore((s) => s.colorThemeId);
+  const fullThemeId = useEditorStore((s) => s.fullThemeId);
   const setColor = useEditorStore((s) => s.setColor);
   const applyColorTheme = useEditorStore((s) => s.applyColorTheme);
+  const applyFullTheme = useEditorStore((s) => s.applyFullTheme);
   const datasets = useEditorStore((s) => s.datasets);
 
   // 当前打开调色盘的颜色索引（null = 未打开）
@@ -20,10 +22,52 @@ export default function ColorPalette() {
 
   return (
     <div className="space-y-5">
-      {/* 预设主题快速切换 */}
+      {/* ========== 完整 ECharts 主题 ========== */}
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-2">
-          预设主题
+          专业主题
+        </label>
+        <div className="space-y-1.5">
+          {FULL_THEMES.map((theme) => (
+            <button
+              key={theme.id}
+              onClick={() => applyFullTheme(theme.id)}
+              className={`w-full px-3 py-2.5 rounded-lg text-left transition-all cursor-pointer ${
+                fullThemeId === theme.id
+                  ? "bg-indigo-50 border border-indigo-300 ring-1 ring-indigo-200"
+                  : "bg-gray-50 border border-gray-200 hover:border-gray-300"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-600 font-medium">
+                  PRO
+                </span>
+                <p
+                  className={`text-xs font-medium ${
+                    fullThemeId === theme.id ? "text-indigo-700" : "text-gray-600"
+                  }`}
+                >
+                  {theme.name}
+                </p>
+              </div>
+              <div className="flex gap-0.5">
+                {theme.colors.slice(0, 8).map((c, i) => (
+                  <div
+                    key={i}
+                    className="h-3 flex-1 rounded-sm first:rounded-l last:rounded-r"
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ========== 纯色彩方案（向后兼容） ========== */}
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-2">
+          色彩方案
         </label>
         <div className="space-y-1.5">
           {COLOR_THEMES.map((theme) => (
@@ -31,14 +75,14 @@ export default function ColorPalette() {
               key={theme.id}
               onClick={() => applyColorTheme(theme.id)}
               className={`w-full px-3 py-2.5 rounded-lg text-left transition-all cursor-pointer ${
-                colorThemeId === theme.id
+                fullThemeId === null && colorThemeId === theme.id
                   ? "bg-blue-50 border border-blue-200"
                   : "bg-gray-50 border border-gray-200 hover:border-gray-300"
               }`}
             >
               <p
                 className={`text-xs font-medium mb-1.5 ${
-                  colorThemeId === theme.id ? "text-blue-700" : "text-gray-600"
+                  fullThemeId === null && colorThemeId === theme.id ? "text-blue-700" : "text-gray-600"
                 }`}
               >
                 {theme.name}
@@ -57,7 +101,7 @@ export default function ColorPalette() {
         </div>
       </div>
 
-      {/* 逐个颜色自定义 */}
+      {/* ========== 逐个颜色自定义 ========== */}
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-2">
           自定义颜色（点击色块编辑）

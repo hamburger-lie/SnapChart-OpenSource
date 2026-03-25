@@ -35,13 +35,16 @@ export type AppStatus = "idle" | "uploading" | "success" | "error";
 
 /** 前端支持的所有图表类型（含子类型） */
 export type DisplayChartType =
-  | "bar" | "stackedBar" | "negativeBar"
+  | "bar" | "stackedBar" | "negativeBar" | "barLine" | "waterfall"
   | "line" | "smoothLine" | "gradientArea" | "stackedArea"
   | "pie" | "doughnut" | "rose"
-  | "scatter";
+  | "scatter"
+  | "radar"
+  | "funnel" | "gauge" | "heatmap" | "treemap"
+  | "sankey" | "sunburst" | "candlestick";
 
 /** 图表大类（用于模板分组） */
-export type ChartCategory = "bar" | "line" | "pie" | "scatter";
+export type ChartCategory = "bar" | "line" | "pie" | "scatter" | "radar" | "advanced";
 
 /** 色彩主题标识 */
 export type ColorThemeId = "business" | "vibrant" | "morandi" | "ocean";

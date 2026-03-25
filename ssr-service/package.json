@@ -1,0 +1,14 @@
+{
+  "name": "snapchart-ssr",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ECharts SSR rendering microservice for SnapChart",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "echarts": "^5.6.0",
+    "express": "^4.21.0"
+  }
+}

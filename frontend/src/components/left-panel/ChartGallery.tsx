@@ -1,30 +1,83 @@
 /**
- * 左侧图表模板画廊（重构版）
- * 按 柱状图 / 折线图 / 饼图 / 散点图 大类分组
- * 每组内展示多个模板变体（基础、堆叠、渐变等）
- * 点击模板仅切换视觉配置，绝不清空用户数据
+ * 左侧图表模板画廊（增强版 v2）
+ * 按 柱状图 / 折线图 / 饼图 / 散点图 / 雷达图 / 高级图表 大类分组
+ * 顶部新增"快捷模板"区域，点击即加载结构 + mock 数据
  */
 
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import { useEditorStore } from "../../store";
-import { TEMPLATE_GROUPS, type ChartTemplate, type TemplateGroup } from "../../constants/chartTemplates";
+import {
+  TEMPLATE_GROUPS,
+  STRUCTURE_TEMPLATES,
+  getBaseChartType,
+  type ChartTemplate,
+  type TemplateGroup,
+  type StructureTemplate,
+} from "../../constants/chartTemplates";
 import type { DisplayChartType } from "../../types/chart";
+
+/** 需要特殊数据结构、无法复用普通行列数据的图表类型 */
+const SPECIAL_DATA_TYPES = new Set(["sankey", "sunburst"]);
 
 export default function ChartGallery() {
   const chartType = useEditorStore((s) => s.chartType);
+  const labels = useEditorStore((s) => s.labels);
+  const datasets = useEditorStore((s) => s.datasets);
   const setChartType = useEditorStore((s) => s.setChartType);
+  const setTitle = useEditorStore((s) => s.setTitle);
+  const loadStructureData = useEditorStore((s) => s.loadStructureData);
   const savedStyles = useEditorStore((s) => s.savedStyles);
   const fetchStyles = useEditorStore((s) => s.fetchStyles);
   const loadStyle = useEditorStore((s) => s.loadStyle);
   const deleteStyle = useEditorStore((s) => s.deleteStyle);
-  const setTitle = useEditorStore((s) => s.setTitle);
   const setColors = useEditorStore((s) => s.setColors);
 
   // 组件挂载时加载样式列表
   useEffect(() => {
     fetchStyles();
   }, [fetchStyles]);
+
+  /**
+   * 智能融合（Smart Merge）策略：
+   * - 用户已有数据 + 普通图表 → 仅切换 chartType，保留数据
+   * - 用户已有数据 + 特殊图表（sankey/sunburst）→ 警告后覆盖
+   * - 无数据 → 加载 mock 数据
+   */
+  const applyStructureTemplate = (tmpl: StructureTemplate) => {
+    const hasUserData = labels.length > 0 && datasets.length > 0;
+    const targetBase = getBaseChartType(tmpl.chartType);
+    const isSpecial = SPECIAL_DATA_TYPES.has(targetBase);
+
+    if (hasUserData && !isSpecial) {
+      // 智能融合：保留用户数据，仅切换图表类型
+      setChartType(tmpl.chartType);
+      // 清除可能残留的 rawOption（从特殊图表切回普通图表时）
+      loadStructureData({
+        labels,
+        datasets,
+        rawOption: null,
+      });
+      return;
+    }
+
+    if (hasUserData && isSpecial) {
+      // 特殊图表需要专属数据格式，弹窗确认
+      const ok = window.confirm(
+        `「${tmpl.label}」需要特定数据格式，将使用示例数据替换当前内容。\n\n确认切换？`,
+      );
+      if (!ok) return;
+    }
+
+    // 无数据 或 用户确认覆盖 → 全量加载 mock 数据
+    setChartType(tmpl.chartType);
+    setTitle(tmpl.mockData.title);
+    loadStructureData({
+      labels: tmpl.mockData.labels,
+      datasets: tmpl.mockData.datasets,
+      rawOption: tmpl.rawOption ?? null,
+    });
+  };
 
   /** 加载并应用保存的样式 */
   const handleLoadStyle = async (id: string) => {
@@ -42,12 +95,41 @@ export default function ChartGallery() {
 
   return (
     <div className="p-3 space-y-1">
-      {/* 标题 */}
+      {/* ========== 快捷模板（含示例数据） ========== */}
+      <div className="mb-3">
+        <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 px-1">
+          快捷模板（含示例数据）
+        </h3>
+        <div className="grid grid-cols-2 gap-1.5 px-1">
+          {STRUCTURE_TEMPLATES.map((tmpl) => (
+            <button
+              key={tmpl.id}
+              onClick={() => applyStructureTemplate(tmpl)}
+              className={`flex flex-col items-center gap-1 p-2 rounded-lg text-[11px] font-medium transition-all cursor-pointer ${
+                chartType === tmpl.chartType
+                  ? "bg-emerald-50 text-emerald-700 border-2 border-emerald-300 shadow-sm"
+                  : "bg-white text-gray-500 border border-gray-200 hover:border-emerald-200 hover:bg-emerald-50/30"
+              }`}
+              title={tmpl.desc}
+            >
+              <div
+                className="h-14 w-full flex items-center justify-center overflow-hidden mb-1 [&_svg]:w-full [&_svg]:h-full"
+                dangerouslySetInnerHTML={{ __html: tmpl.thumbnail }}
+              />
+              <span className="leading-tight truncate w-full text-center">{tmpl.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ========== 分隔线 ========== */}
+      <div className="border-t border-gray-200 my-2" />
+
+      {/* ========== 图表类型模板 ========== */}
       <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 px-1">
-        图表模板
+        图表类型
       </h3>
 
-      {/* 按大类分组 */}
       {TEMPLATE_GROUPS.map((group) => (
         <TemplateGroupSection
           key={group.category}
@@ -107,18 +189,15 @@ function TemplateGroupSection({
   currentType: DisplayChartType;
   onSelect: (type: DisplayChartType) => void;
 }) {
-  // 如果当前选中的类型属于该组，默认展开
   const isGroupActive = group.templates.some((t) => t.id === currentType);
   const [expanded, setExpanded] = useState(isGroupActive);
 
-  // 当外部切换导致激活状态变化时自动展开
   useEffect(() => {
     if (isGroupActive) setExpanded(true);
   }, [isGroupActive]);
 
   return (
     <div className="rounded-lg overflow-hidden">
-      {/* 分组标题 */}
       <button
         onClick={() => setExpanded((v) => !v)}
         className={`w-full flex items-center gap-1.5 px-2 py-2 text-xs font-medium transition-colors cursor-pointer rounded-lg ${
@@ -136,7 +215,6 @@ function TemplateGroupSection({
         <span className="text-[10px] text-gray-400 ml-auto">{group.templates.length}</span>
       </button>
 
-      {/* 模板列表 */}
       {expanded && (
         <div className="grid grid-cols-2 gap-1.5 px-1 pb-2 pt-1">
           {group.templates.map((template) => (
@@ -174,12 +252,11 @@ function TemplateCard({
       }`}
       title={template.desc}
     >
-      {/* 缩略图 SVG */}
       <div
-        className="w-full h-8"
+        className="h-14 w-full flex items-center justify-center overflow-hidden mb-1 [&_svg]:w-full [&_svg]:h-full"
         dangerouslySetInnerHTML={{ __html: template.thumbnail }}
       />
-      <span className="leading-tight">{template.label}</span>
+      <span className="leading-tight truncate w-full text-center">{template.label}</span>
     </button>
   );
 }
